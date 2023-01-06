@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 chrono = "0.4"
 log = "0.4"
+tokio = {version = "1.23", features = ["sync"]}
 
 [dev-dependencies]
 dashmap = "5.4.0"
