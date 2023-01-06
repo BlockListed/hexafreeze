@@ -1,4 +1,4 @@
-## Hexafreeze
+# Hexafreeze
 A library to asynchronously generate Snowflake IDs.
 
 # What is a snowflake

@@ -25,7 +25,6 @@
 #![allow(clippy::needless_return)]
 #![allow(clippy::module_name_repetitions)]
 
-//! # HexaFreeze
 #![doc = include_str!("../README.md")]
 
 mod util;
