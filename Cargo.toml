@@ -2,6 +2,12 @@
 name = "hexafreeze"
 version = "0.1.0"
 edition = "2021"
+authors = "Blocklisted <blocklisted@pm.me>"
+readme = "README.md"
+repositry = "https://github.com/blocklisted/hexafreeze"
+license = "MIT"
+keywords = ["async", "web", "distributed", "snowflake", "unique"]
+categories = ["web-programming", "database"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
