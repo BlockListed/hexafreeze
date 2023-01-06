@@ -27,4 +27,4 @@ let id: i64 = gen.generate().await
 
 # Details
 * The generation happens on a seperate thread to avoid error-prone synchronisation issues.
-* Unlike Twitter's reference implementation the sequence does **not** get reset every millisecond.
+* Unlike Twitter's reference implementation, the sequence does **not** get reset every millisecond.
