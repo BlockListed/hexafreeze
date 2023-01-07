@@ -191,7 +191,7 @@ impl InternalGenerator {
             return Err(GeneratorError::EpochInTheFuture)
         }
 
-        if now - epoch_micros < constants::MAX_TIMESTAMP_MILLIS {
+        if (now - epoch_micros) / 1000 < constants::MAX_TIMESTAMP_MILLIS {
             return Err(GeneratorError::EpochTooFarInThePast)
         }
 
@@ -301,3 +301,6 @@ impl InternalGenerator {
         return Ok(util::create_snowflake(since_epoch_millis, self.node_id, seq))
     }
 }
+
+#[cfg(test)]
+mod test;
