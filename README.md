@@ -1,3 +1,6 @@
+# TODO
+* Another fucking rewrite with Actix Actors maybe
+
 # Hexafreeze
 A library to asynchronously generate Snowflake IDs.
 
@@ -9,20 +12,30 @@ Snowflakes have the following layout:
 ![Snowflake ID layout](https://upload.wikimedia.org/wikipedia/commons/5/5a/Snowflake-identifier.png)
 
 # Usage
+First you need to include dependencies. These are the recommended features. Tokio may be slimmed down by enabling individual features instead of `full`.
+```ignore
+[dependencies]
+hexafreeze = "0.1"
+tokio = {version = "1", features = ["full"]}
+```
+
 [`Generator`] is the interface for the generation of snowflakes.
+Snowflakes require an `epoch`, basically the start time of the Snowflake, it needs to be in the past, and less than ~ 69 years ago.
 It is thread-safe, therefore you do not need a Mutex to contain it.
-It is recommend to use the same generator for all purposes in a rust application. Something like `once_cell` may be useful for this.
+It is recommend to use the same generator in all places in a rust application. Something like `once_cell` may be useful for this.
 ```rust
 use hexafreeze::Generator;
-use chrono::prelude::*;
+use hexafreeze::DEFAULT_EPOCH;
 
-let epoch = DateTime::from_utc(NaiveDate::from_ymd(2022, 1, 1).and_hms(0, 0, 0), Utc)
+#[tokio::main]
+async fn main() {
+    // If your system is not distributed using `0` as the `node_id` is perfectly fine.
+    // The `DEFAULT_EPOCH` always needs to be dereferenced.
+    let gen = Generator::new(0, *DEFAULT_EPOCH).unwrap();
 
-// If your system is not distributed using `0` as the `node_id` is perfectly fine.
-let gen = Generator::new(0, epoch)
-
-// The `generate` function is async and non-blocking.
-let id: i64 = gen.generate().await
+    // The `generate` function is async and non-blocking.
+    let id: i64 = gen.generate().await.unwrap();
+}
 ```
 
 # Details

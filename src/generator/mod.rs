@@ -3,19 +3,19 @@ use log::error;
 use tokio::sync::{mpsc, oneshot};
 
 use std::fmt::Display;
+use std::future::Future;
+use std::mem::replace;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::task::{Waker, Poll};
-use std::future::Future;
+use std::task::{Poll, Waker};
 use std::thread;
-use std::mem::replace;
 use std::time;
 
 use crate::util::constants;
 
 mod util;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[non_exhaustive]
 pub enum GeneratorError {
     EpochInTheFuture,
@@ -33,7 +33,7 @@ impl Display for GeneratorError {
             GeneratorError::EpochTooFarInThePast => write!(f, "Epoch is more than 2**41-1 milliseconds in the past."),
             GeneratorError::IncrementBiggerThanSixtyFourBitSignedLimit => write!(f, "You are trying to generate more than 2**63-1 ids, which is sadly impossible."),
             GeneratorError::NodeIdToBig => write!(f, "Node id is bigger than 2**10-1 (1024)."),
-            GeneratorError::ItsTheFuture => write!(f, "It's literally been more than 200k years since the invention of rust, please and this library is definetely deprecated now."),
+            GeneratorError::ItsTheFuture => write!(f, "It's literally been more than 200k years since the invention of rust, please stop and also this library is definetely deprecated now."),
             GeneratorError::Other(x) => write!(f, "{}", x),
         }
     }
@@ -51,7 +51,7 @@ impl Generator {
     ///
     /// If the request buffer is filled, then new requests will wait, but still come through.
     /// In practice it should probably never fill though.
-    /// 
+    ///
     /// # Errors
     /// * `node_id` is bigger than 2**10-1 (1024).
     /// * Epoch is in the future
@@ -65,30 +65,32 @@ impl Generator {
     ///
     /// If the request buffer is filled, then new requests will wait, but still come through.
     /// In practice it should probably never fill though.
-    /// 
+    ///
     /// # Errors
     /// * `node_id` is bigger than 2**10-1 (1024).
     /// * Epoch is in the future
-    /// * Epoch is more than 2**41-1 milliseconds in the past
+    /// * Epoch is more than 2**41-1 milliseconds in the past. (~69 years)
     /// * Not an error, but it will cause issues if the time is later than ~ 290k years AD.
-    pub fn new_custom_buffer_size(node_id: i64, epoch: DateTime<Utc>, req_buffer_size: usize) -> Result<Self, GeneratorError> {
-        let (req_sender, req_receiver) = mpsc::channel::<GeneratorRequest>(req_buffer_size);
+    pub fn new_custom_buffer_size(
+        node_id: i64,
+        epoch: DateTime<Utc>,
+        req_buffer_size: usize,
+    ) -> Result<Self, GeneratorError> {
+        let (req_sender, req_receiver) = mpsc::unbounded_channel::<GeneratorRequest>();
 
         let epoch_micros = epoch.timestamp_micros();
         let handle = InternalGenerator::new(node_id, epoch_micros, req_receiver, req_sender)?;
 
-        return Ok(Self {
-            generator: handle,
-        })
+        return Ok(Self { generator: handle });
     }
-    
+
     /// Generate a new [i64] id.
-    /// 
+    ///
     /// # Errors
     /// * Generator thread panics
     /// * Generating more than [`i64::MAX`] ids. (in total)
     /// * Epoch is in the future.
-    /// * Epoch is more than 2**41-1 milliseconds in the past.
+    /// * Epoch is more than 2**41-1 milliseconds in the past. (~69 years)
     /// * The time is later than ~290k years AD.
     pub async fn generate(&self) -> Result<i64, GeneratorError> {
         let increment = self.generator.get_new_increment()?;
@@ -99,8 +101,8 @@ impl Generator {
             return_channel: tx,
             waker: Arc::clone(&w),
         };
-        if let Err(x) = self.generator.request_channel.send(request).await {
-            return Err(GeneratorError::Other(x.to_string()))
+        if let Err(x) = self.generator.request_channel.send(request) {
+            return Err(GeneratorError::Other(x.to_string()));
         }
 
         let future_id = GeneratorIdFuture {
@@ -108,7 +110,7 @@ impl Generator {
             waker: w,
         };
 
-        return future_id.await
+        return future_id.await;
     }
 }
 
@@ -128,7 +130,10 @@ struct GeneratorIdFuture {
 impl Future for GeneratorIdFuture {
     type Output = Result<i64, GeneratorError>;
 
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
         match self.return_channel.try_recv() {
             Ok(x) => Poll::Ready(x),
             Err(x) => {
@@ -139,13 +144,15 @@ impl Future for GeneratorIdFuture {
                         // and this is shown in the rust async book.
                         // https://rust-lang.github.io/async-book/02_execution/03_wakeups.html
                         *self.waker.lock().unwrap() = Some(cx.waker().clone());
-                        return Poll::Pending
-                    },
+                        return Poll::Pending;
+                    }
                     oneshot::error::TryRecvError::Closed => {
-                        return Poll::Ready(Err(GeneratorError::Other("Internal generator seems to have panicked.".to_string())))
+                        return Poll::Ready(Err(GeneratorError::Other(
+                            "Internal generator seems to have panicked.".to_string(),
+                        )))
                     }
                 }
-            } 
+            }
         }
     }
 }
@@ -157,13 +164,13 @@ struct InternalGenerator {
     increment: Arc<AtomicI64>,
     last_reset_time_micros: i64,
     distribute_sleep: bool,
-    req_receiver: mpsc::Receiver<GeneratorRequest>,
+    req_receiver: mpsc::UnboundedReceiver<GeneratorRequest>,
 }
 
 #[derive(Clone)]
 struct InternalGeneratorHandle {
     increment: Arc<AtomicI64>,
-    pub request_channel: mpsc::Sender<GeneratorRequest>,
+    pub request_channel: mpsc::UnboundedSender<GeneratorRequest>,
 }
 
 impl InternalGeneratorHandle {
@@ -182,17 +189,17 @@ impl InternalGeneratorHandle {
 impl InternalGenerator {
     fn check_creation_parameters(node_id: i64, epoch_micros: i64) -> Result<(), GeneratorError> {
         if node_id > constants::MAX_NODE_ID {
-            return Err(GeneratorError::NodeIdToBig)
+            return Err(GeneratorError::NodeIdToBig);
         }
 
         let now = util::now_micros()?;
 
         if now - epoch_micros < 0 {
-            return Err(GeneratorError::EpochInTheFuture)
+            return Err(GeneratorError::EpochInTheFuture);
         }
 
-        if (now - epoch_micros) / 1000 < constants::MAX_TIMESTAMP_MILLIS {
-            return Err(GeneratorError::EpochTooFarInThePast)
+        if (now - epoch_micros) / 1000 > constants::MAX_TIMESTAMP_MILLIS {
+            return Err(GeneratorError::EpochTooFarInThePast);
         }
 
         Ok(())
@@ -200,7 +207,12 @@ impl InternalGenerator {
 
     // Returning the generator itself is a bad idea.
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(node_id: i64, epoch_micros: i64, req_receiver: mpsc::Receiver<GeneratorRequest>, req_sender: mpsc::Sender<GeneratorRequest>) -> Result<InternalGeneratorHandle, GeneratorError> {
+    pub fn new(
+        node_id: i64,
+        epoch_micros: i64,
+        req_receiver: mpsc::UnboundedReceiver<GeneratorRequest>,
+        req_sender: mpsc::UnboundedSender<GeneratorRequest>,
+    ) -> Result<InternalGeneratorHandle, GeneratorError> {
         Self::check_creation_parameters(node_id, epoch_micros)?;
 
         let data = Self {
@@ -219,7 +231,7 @@ impl InternalGenerator {
 
         data.spawn();
 
-        return Ok(r)
+        return Ok(r);
     }
 
     fn spawn(self) {
@@ -246,10 +258,10 @@ impl InternalGenerator {
     fn generate(&mut self, r: &GeneratorRequest) -> GeneratorResponse {
         let seq = r.req_id % constants::RESET_INCREMENT;
         self.distribute_sleep();
-            
+
         let timestamp_micros = self.get_timestamp(seq)?;
 
-        return self.create_id(timestamp_micros, seq)
+        return self.create_id(timestamp_micros, seq);
     }
 
     // This function will distribute sleep over every generate to avoid spikes in generation time.
@@ -285,20 +297,24 @@ impl InternalGenerator {
             // assuming, that `last_reset_micros` is in the past.
             #[allow(clippy::cast_sign_loss)]
             thread::sleep(time::Duration::from_micros(sleep_time as u64));
-            return (true, sleep_time)
+            return (true, sleep_time);
         }
-        return (false, 0)
+        return (false, 0);
     }
 
     fn create_id(&self, ts_micros: i64, seq: i64) -> GeneratorResponse {
         let since_epoch_millis = (ts_micros - self.epoch_micros).div_euclid(1000);
         if since_epoch_millis < 0 {
-            return Err(GeneratorError::EpochInTheFuture)
+            return Err(GeneratorError::EpochInTheFuture);
         };
         if since_epoch_millis > constants::MAX_TIMESTAMP_MILLIS {
-            return Err(GeneratorError::EpochTooFarInThePast)
+            return Err(GeneratorError::EpochTooFarInThePast);
         };
-        return Ok(util::create_snowflake(since_epoch_millis, self.node_id, seq))
+        return Ok(util::create_snowflake(
+            since_epoch_millis,
+            self.node_id,
+            seq,
+        ));
     }
 }
 
