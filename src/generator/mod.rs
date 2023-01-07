@@ -74,7 +74,7 @@ impl Generator {
     pub fn new_custom_buffer_size(
         node_id: i64,
         epoch: DateTime<Utc>,
-        req_buffer_size: usize,
+        _req_buffer_size: usize,
     ) -> Result<Self, GeneratorError> {
         let (req_sender, req_receiver) = mpsc::unbounded_channel::<GeneratorRequest>();
 
