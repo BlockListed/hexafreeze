@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-use std::time::Duration;
 
 use chrono::prelude::{DateTime, Utc};
 use once_cell::sync::Lazy;
@@ -17,8 +16,7 @@ pub const TIMESTAMP_SHIFT: isize = INSTANCE_LENGTH + SEQUENCE_LENGTH;
 pub const INSTANCE_SHIFT: isize = SEQUENCE_LENGTH;
 pub const SEQUENCE_SHIFT: isize = 0;
 
-pub const DISTRIBUTED_SLEEP_TIME: Duration =
-    Duration::from_nanos(10u64.pow(9) / RESET_INCREMENT as u64);
+pub const DISTRIBUTED_SLEEP_TIME: spin_sleep::Nanoseconds = 10u64.pow(9) / RESET_INCREMENT as u64;
 
 // Snowflake constants
 pub const MAX_TIMESTAMP_MILLIS: i64 = (1 << 41) - 1;

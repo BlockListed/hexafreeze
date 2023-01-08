@@ -112,6 +112,21 @@ impl Generator {
 
         return future_id.await;
     }
+
+    /// REMEMBER TO REMOVE
+    #[deprecated]
+    pub fn check_internal_generator(&self) -> Result<(), String> {
+        let mut l = self.generator.generator_handle.lock().unwrap();
+        let h = l.take().unwrap();
+        if h.is_finished() {
+            if let Err(y) = h.join() {
+                return Err(format!("{:?}", y), )
+            }
+        } else {
+            *l = Some(h);
+        }
+        return Ok(())
+    }
 }
 
 struct GeneratorRequest {
@@ -171,6 +186,7 @@ struct InternalGenerator {
 struct InternalGeneratorHandle {
     increment: Arc<AtomicI64>,
     pub request_channel: mpsc::UnboundedSender<GeneratorRequest>,
+    pub generator_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
 }
 
 impl InternalGeneratorHandle {
@@ -224,20 +240,23 @@ impl InternalGenerator {
             req_receiver,
         };
 
-        let r = InternalGeneratorHandle {
-            increment: Arc::clone(&data.increment),
-            request_channel: req_sender,
-        };
+        let increment_handle = Arc::clone(&data.increment);
 
-        data.spawn();
+        let thread = data.spawn();
+
+        let r = InternalGeneratorHandle {
+            increment: increment_handle,
+            request_channel: req_sender,
+            generator_handle: Arc::new(Mutex::new(Some(thread))),
+        };
 
         return Ok(r);
     }
 
-    fn spawn(self) {
+    fn spawn(self) -> thread::JoinHandle<()> {
         thread::spawn(move || {
             self.main_loop();
-        });
+        })
     }
 
     // Main loop for the generator Thread
@@ -268,7 +287,7 @@ impl InternalGenerator {
     // It only runs when you request more than 2**10-1 ids per millisecond.
     fn distribute_sleep(&self) {
         if self.distribute_sleep {
-            thread::sleep(constants::DISTRIBUTED_SLEEP_TIME);
+            spin_sleep::SpinSleeper::new(1000).with_spin_strategy(spin_sleep::SpinStrategy::YieldThread).sleep_ns(constants::DISTRIBUTED_SLEEP_TIME);
         }
     }
 

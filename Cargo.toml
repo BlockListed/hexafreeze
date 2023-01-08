@@ -17,15 +17,16 @@ chrono = "0.4"
 log = "0.4"
 tokio = {version = "1.24", features = ["sync"]}
 once_cell = "1.17"
+spin_sleep = "1.1"
 
 [dev-dependencies]
-tokio = {version = "1.24", features = ["sync", "rt-multi-thread", "macros"]}
+tokio = {version = "1.24", features = ["sync", "rt-multi-thread", "macros", "time"]}
 dashmap = "5.4.0"
 num_cpus = "1.1"
 env_logger = "0.10"
 criterion = "0.4.0"
 
-[profile.bench]
+[profile.release]
 debug = true
 
 [[bench]]
