@@ -21,6 +21,7 @@ pub struct Generator {
     last_reset: Arc<Mutex<DateTime<Utc>>>,
     distribute_sleep: Arc<AtomicBool>,
 }
+
 impl Generator {
     /// Creates a new generator with your desired configuration.
     /// 
