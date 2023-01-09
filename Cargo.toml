@@ -1,6 +1,6 @@
 [package]
 name = "hexafreeze"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Blocklisted <blocklisted@pm.me>"]
 description = "Asynchronous generation of snowflake IDs"
