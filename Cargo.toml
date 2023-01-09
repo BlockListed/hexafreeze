@@ -3,6 +3,7 @@ name = "hexafreeze"
 version = "0.1.0"
 edition = "2021"
 authors = ["Blocklisted <blocklisted@pm.me>"]
+description = "Asynchronous generation of snowflake IDs"
 readme = "README.md"
 repository = "https://github.com/blocklisted/hexafreeze"
 license = "MIT"
