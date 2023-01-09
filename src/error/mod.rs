@@ -5,6 +5,6 @@ pub enum HexaFreezeError {
     EpochInTheFuture,
     EpochTooFarInThePast,
     NodeIdTooLarge,
-    ClockWentToTheFuture,
+    ClockWentBackInTime,
     Surpassed64BitLimit,
 }

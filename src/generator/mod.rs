@@ -73,7 +73,7 @@ impl Generator {
     /// Since it only errors ...
     /// * When the epoch is more than ~69 years ago.
     /// * When you have generated more than `9_223_372_036_854_775_807` ids. (In total, for this generator)
-    /// * When your clock moves forward.
+    /// * When your clock jumps backward in time a significant amount.
     pub async fn generate(&self) -> HexaFreezeResult<i64> {
         let mut i = self.increment.lock().await;
         self.distribute_sleep().await;
@@ -109,7 +109,7 @@ impl Generator {
             let delta = now - last;
 
             if delta < chrono::Duration::seconds(0) {
-                return Err(HexaFreezeError::ClockWentToTheFuture);
+                return Err(HexaFreezeError::ClockWentBackInTime);
             }
 
             if delta < chrono::Duration::milliseconds(1) {
