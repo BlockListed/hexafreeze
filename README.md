@@ -1,6 +1,3 @@
-# TODO
-* Another fucking rewrite with Actix Actors maybe
-
 # Hexafreeze
 A library to asynchronously generate Snowflake IDs.
 
@@ -20,9 +17,9 @@ tokio = {version = "1", features = ["full"]}
 ```
 
 [`Generator`] is the interface for the generation of snowflakes.
-Snowflakes require an `epoch`, basically the start time of the Snowflake, it needs to be in the past, and less than ~ 69 years ago.
+Snowflakes require an `epoch`, basically the start time of the Snowflake, it needs to be in the past, and less than ~ 69 years ago. [`DEFAULT_EPOCH`] should be fine for most applications until 2079.
 It is thread-safe, therefore you do not need a Mutex to contain it.
-It is recommend to use the same generator in all places in a rust application. Something like `once_cell` may be useful for this.
+It is recommend to use the same generator in all places in a rust application, something like `once_cell` may be useful for this.
 ```rust
 use hexafreeze::Generator;
 use hexafreeze::DEFAULT_EPOCH;
@@ -39,5 +36,4 @@ async fn main() {
 ```
 
 # Details
-* The generation happens on a seperate thread to avoid error-prone synchronisation issues.
 * Unlike Twitter's reference implementation, the sequence does **not** get reset every millisecond.

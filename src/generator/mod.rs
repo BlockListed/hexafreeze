@@ -1,339 +1,142 @@
-use chrono::{DateTime, Utc};
-use log::error;
-use tokio::sync::{mpsc, oneshot};
-
-use std::fmt::Display;
-use std::future::Future;
+use chrono::prelude::*;
 use std::mem::replace;
-use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::task::{Poll, Waker};
-use std::thread;
-use std::time;
+use std::ops::DerefMut;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
-use crate::util::constants;
+use tokio::sync::Mutex;
 
+mod checks;
 mod util;
 
-#[derive(Debug, PartialEq)]
-#[non_exhaustive]
-pub enum GeneratorError {
-    EpochInTheFuture,
-    EpochTooFarInThePast,
-    IncrementBiggerThanSixtyFourBitSignedLimit,
-    NodeIdToBig,
-    ItsTheFuture,
-    Other(String),
-}
-
-impl Display for GeneratorError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            GeneratorError::EpochInTheFuture => write!(f, "Epoch is in the future!"),
-            GeneratorError::EpochTooFarInThePast => write!(f, "Epoch is more than 2**41-1 milliseconds in the past."),
-            GeneratorError::IncrementBiggerThanSixtyFourBitSignedLimit => write!(f, "You are trying to generate more than 2**63-1 ids, which is sadly impossible."),
-            GeneratorError::NodeIdToBig => write!(f, "Node id is bigger than 2**10-1 (1024)."),
-            GeneratorError::ItsTheFuture => write!(f, "It's literally been more than 200k years since the invention of rust, please stop and also this library is definetely deprecated now."),
-            GeneratorError::Other(x) => write!(f, "{}", x),
-        }
-    }
-}
-
-pub type GeneratorResponse = Result<i64, GeneratorError>;
+use crate::HexaFreezeError;
+use crate::{constants, error::HexaFreezeResult};
 
 #[derive(Clone)]
 pub struct Generator {
-    generator: InternalGeneratorHandle,
-}
-
-impl Generator {
-    /// Create a new generator with the default size request buffer (16).
-    ///
-    /// If the request buffer is filled, then new requests will wait, but still come through.
-    /// In practice it should probably never fill though.
-    ///
-    /// # Errors
-    /// * `node_id` is bigger than 2**10-1 (1024).
-    /// * Epoch is in the future
-    /// * Epoch is more than 2**41-1 milliseconds in the past
-    /// * Not an error, but it will cause issues if the time is later than ~ 290k years AD.
-    pub fn new(node_id: i64, epoch: DateTime<Utc>) -> Result<Self, GeneratorError> {
-        Self::new_custom_buffer_size(node_id, epoch, constants::DEFAULT_BUFFER_SIZE)
-    }
-
-    /// Create a new generator with a custom size for the request buffer. (Advanced users only)
-    ///
-    /// If the request buffer is filled, then new requests will wait, but still come through.
-    /// In practice it should probably never fill though.
-    ///
-    /// # Errors
-    /// * `node_id` is bigger than 2**10-1 (1024).
-    /// * Epoch is in the future
-    /// * Epoch is more than 2**41-1 milliseconds in the past. (~69 years)
-    /// * Not an error, but it will cause issues if the time is later than ~ 290k years AD.
-    pub fn new_custom_buffer_size(
-        node_id: i64,
-        epoch: DateTime<Utc>,
-        _req_buffer_size: usize,
-    ) -> Result<Self, GeneratorError> {
-        let (req_sender, req_receiver) = mpsc::unbounded_channel::<GeneratorRequest>();
-
-        let epoch_micros = epoch.timestamp_micros();
-        let handle = InternalGenerator::new(node_id, epoch_micros, req_receiver, req_sender)?;
-
-        return Ok(Self { generator: handle });
-    }
-
-    /// Generate a new [i64] id.
-    ///
-    /// # Errors
-    /// * Generator thread panics
-    /// * Generating more than [`i64::MAX`] ids. (in total)
-    /// * Epoch is in the future.
-    /// * Epoch is more than 2**41-1 milliseconds in the past. (~69 years)
-    /// * The time is later than ~290k years AD.
-    pub async fn generate(&self) -> Result<i64, GeneratorError> {
-        let increment = self.generator.get_new_increment()?;
-        let (tx, rx) = oneshot::channel::<GeneratorResponse>();
-        let w = Arc::new(Mutex::new(None));
-        let request = GeneratorRequest {
-            req_id: increment,
-            return_channel: tx,
-            waker: Arc::clone(&w),
-        };
-        if let Err(x) = self.generator.request_channel.send(request) {
-            return Err(GeneratorError::Other(x.to_string()));
-        }
-
-        let future_id = GeneratorIdFuture {
-            return_channel: rx,
-            waker: w,
-        };
-
-        return future_id.await;
-    }
-
-    /// REMEMBER TO REMOVE
-    #[deprecated]
-    pub fn check_internal_generator(&self) -> Result<(), String> {
-        let mut l = self.generator.generator_handle.lock().unwrap();
-        let h = l.take().unwrap();
-        if h.is_finished() {
-            if let Err(y) = h.join() {
-                return Err(format!("{:?}", y), )
-            }
-        } else {
-            *l = Some(h);
-        }
-        return Ok(())
-    }
-}
-
-struct GeneratorRequest {
-    pub req_id: i64,
-    // Why in gods name did I decide on thread to thread communication.
-    pub return_channel: oneshot::Sender<GeneratorResponse>,
-    pub waker: Arc<Mutex<Option<Waker>>>,
-}
-
-struct GeneratorIdFuture {
-    // Why in gods name did I decide on thread to thread communication.
-    pub return_channel: oneshot::Receiver<GeneratorResponse>,
-    pub waker: Arc<Mutex<Option<Waker>>>,
-}
-
-impl Future for GeneratorIdFuture {
-    type Output = Result<i64, GeneratorError>;
-
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        match self.return_channel.try_recv() {
-            Ok(x) => Poll::Ready(x),
-            Err(x) => {
-                match x {
-                    oneshot::error::TryRecvError::Empty => {
-                        // I do know this may block.
-                        // But it will not block for very long
-                        // and this is shown in the rust async book.
-                        // https://rust-lang.github.io/async-book/02_execution/03_wakeups.html
-                        *self.waker.lock().unwrap() = Some(cx.waker().clone());
-                        return Poll::Pending;
-                    }
-                    oneshot::error::TryRecvError::Closed => {
-                        return Poll::Ready(Err(GeneratorError::Other(
-                            "Internal generator seems to have panicked.".to_string(),
-                        )))
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct InternalGenerator {
+    epoch: DateTime<Utc>,
     node_id: i64,
-    epoch_micros: i64,
+    increment: Arc<Mutex<i64>>,
 
-    increment: Arc<AtomicI64>,
-    last_reset_time_micros: i64,
-    distribute_sleep: bool,
-    req_receiver: mpsc::UnboundedReceiver<GeneratorRequest>,
+    last_reset: Arc<Mutex<DateTime<Utc>>>,
+    distribute_sleep: Arc<AtomicBool>,
 }
+impl Generator {
+    /// Creates a new generator with your desired configuration.
+    /// 
+    /// # Example
+    /// ```rust
+    /// use hexafreeze::{Generator, DEFAULT_EPOCH};
+    /// 
+    /// let generator = Generator::new(0, *DEFAULT_EPOCH);
+    /// ```
+    /// 
+    /// # Errors
+    /// * When `node_id` is bigger than 1024
+    /// * When the epoch is more than ~69 years ago.
+    /// * When the epoch is in the future.
+    // Ok since it it a string literal and this function is unit tested to not panic.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn new(node_id: i64, epoch: DateTime<Utc>) -> HexaFreezeResult<Self> {
+        checks::check_node_id(node_id)?;
+        checks::check_epoch(epoch)?;
 
-#[derive(Clone)]
-struct InternalGeneratorHandle {
-    increment: Arc<AtomicI64>,
-    pub request_channel: mpsc::UnboundedSender<GeneratorRequest>,
-    pub generator_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
-}
-
-impl InternalGeneratorHandle {
-    pub fn get_new_increment(&self) -> Result<i64, GeneratorError> {
-        // SeqCst cause this shit is too damn confusing and
-        // the limiting factor to performance is inherent to snowflakes.
-        let increment = self.increment.fetch_add(1, Ordering::SeqCst);
-        if increment == i64::MAX {
-            return Err(GeneratorError::IncrementBiggerThanSixtyFourBitSignedLimit);
-        }
-
-        return Ok(increment);
-    }
-}
-
-impl InternalGenerator {
-    fn check_creation_parameters(node_id: i64, epoch_micros: i64) -> Result<(), GeneratorError> {
-        if node_id > constants::MAX_NODE_ID {
-            return Err(GeneratorError::NodeIdToBig);
-        }
-
-        let now = util::now_micros()?;
-
-        if now - epoch_micros < 0 {
-            return Err(GeneratorError::EpochInTheFuture);
-        }
-
-        if (now - epoch_micros) / 1000 > constants::MAX_TIMESTAMP_MILLIS {
-            return Err(GeneratorError::EpochTooFarInThePast);
-        }
-
-        Ok(())
-    }
-
-    // Returning the generator itself is a bad idea.
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(
-        node_id: i64,
-        epoch_micros: i64,
-        req_receiver: mpsc::UnboundedReceiver<GeneratorRequest>,
-        req_sender: mpsc::UnboundedSender<GeneratorRequest>,
-    ) -> Result<InternalGeneratorHandle, GeneratorError> {
-        Self::check_creation_parameters(node_id, epoch_micros)?;
-
-        let data = Self {
+        Ok(Self {
+            epoch,
             node_id,
-            epoch_micros,
-            increment: Arc::new(AtomicI64::new(0)),
-            last_reset_time_micros: 0,
-            distribute_sleep: false,
-            req_receiver,
-        };
-
-        let increment_handle = Arc::clone(&data.increment);
-
-        let thread = data.spawn();
-
-        let r = InternalGeneratorHandle {
-            increment: increment_handle,
-            request_channel: req_sender,
-            generator_handle: Arc::new(Mutex::new(Some(thread))),
-        };
-
-        return Ok(r);
-    }
-
-    fn spawn(self) -> thread::JoinHandle<()> {
-        thread::spawn(move || {
-            self.main_loop();
+            increment: Arc::new(Mutex::new(0)),
+            last_reset: Arc::new(Mutex::new(
+                DateTime::parse_from_rfc3339("0000-01-01T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+            )),
+            distribute_sleep: Arc::new(AtomicBool::new(false)),
         })
     }
 
-    // Main loop for the generator Thread
-    fn main_loop(mut self) {
-        while let Some(r) = self.req_receiver.blocking_recv() {
-            let resp = self.generate(&r);
+    /// Generates a new snowflake ID
+    /// 
+    /// # Example
+    /// ```rust
+    /// use hexafreeze::{Generator, DEFAULT_EPOCH};
+    /// 
+    /// # tokio::runtime::Runtime::new().unwrap().block_on(async {
+    /// let generator = Generator::new(0, *DEFAULT_EPOCH).unwrap();
+    /// 
+    /// let id = generator.generate().await.unwrap();
+    /// # })
+    /// ```
+    /// 
+    /// # Errors
+    /// It is generally ok to call `unwrap()` on this Result.
+    /// Since it only errors ...
+    /// * When the epoch is more than ~69 years ago.
+    /// * When you have generated more than `9_223_372_036_854_775_807` ids. (In total, for this generator)
+    /// * When your clock moves forward.
+    pub async fn generate(&self) -> HexaFreezeResult<i64> {
+        let mut i = self.increment.lock().await;
+        self.distribute_sleep().await;
+        let (seq, now) = self.get_sequence(i.deref_mut()).await?;
+        drop(i);
 
-            if r.return_channel.send(resp).is_err() {
-                error!("Receiving end of ID hung up before we could generate!");
-            }
-            if let Some(w) = (*r.waker.lock().unwrap()).take() {
-                w.wake();
-            }
+        self.create_id(now, seq)
+    }
+
+    async fn distribute_sleep(&self) {
+        if self.distribute_sleep.load(Ordering::Relaxed) {
+            tokio::task::spawn_blocking(|| {
+                spin_sleep::SpinSleeper::new(100_000)
+                    .with_spin_strategy(spin_sleep::SpinStrategy::YieldThread)
+                    .sleep(constants::DISTRIBUTED_SLEEP_TIME);
+            })
+            .await
+            .unwrap();
         }
     }
 
-    // Functions for generation
-    fn generate(&mut self, r: &GeneratorRequest) -> GeneratorResponse {
-        let seq = r.req_id % constants::RESET_INCREMENT;
-        self.distribute_sleep();
-
-        let timestamp_micros = self.get_timestamp(seq)?;
-
-        return self.create_id(timestamp_micros, seq);
-    }
-
-    // This function will distribute sleep over every generate to avoid spikes in generation time.
-    // It only runs when you request more than 2**10-1 ids per millisecond.
-    fn distribute_sleep(&self) {
-        if self.distribute_sleep {
-            spin_sleep::SpinSleeper::new(1000).with_spin_strategy(spin_sleep::SpinStrategy::YieldThread).sleep_ns(constants::DISTRIBUTED_SLEEP_TIME);
+    async fn get_sequence(&self, inc: &mut i64) -> HexaFreezeResult<(i64, DateTime<Utc>)> {
+        let now = util::now();
+        let seq = *inc % constants::RESET_INCREMENT;
+        if *inc == i64::MAX {
+            return Err(HexaFreezeError::Surpassed64BitLimit);
         }
-    }
+        *inc += 1;
 
-    fn get_timestamp(&mut self, seq: i64) -> Result<i64, GeneratorError> {
-        let mut now = util::now_micros()?;
         if seq == 0 {
-            let (should_sleep, sleep_time) = self.check_min_reset_time_and_sleep(now);
-            self.distribute_sleep = should_sleep;
-            // Make sure `now` is actually the (expected) current time.
-            now += sleep_time;
+            let last = replace(self.last_reset.lock().await.deref_mut(), now);
+
+            let delta = now - last;
+
+            if delta < chrono::Duration::seconds(0) {
+                return Err(HexaFreezeError::ClockWentToTheFuture);
+            }
+
+            if delta < chrono::Duration::milliseconds(1) {
+                // Safe to unwrap, because we know its below a millisecond and that it's bigger than 0.
+                tokio::time::sleep(delta.to_std().unwrap()).await;
+                self.distribute_sleep.store(true, Ordering::Relaxed);
+
+                // No .abs(), because we know its bigger than 0
+                return Ok((seq, now + delta));
+            }
+
+            self.distribute_sleep.store(false, Ordering::Relaxed);
         }
 
-        return Ok(now);
+        Ok((seq, now))
     }
 
-    fn check_min_reset_time_and_sleep(&mut self, now: i64) -> (bool, i64) {
-        let last_reset_micros = replace(&mut self.last_reset_time_micros, now);
+    fn create_id(&self, now: DateTime<Utc>, seq: i64) -> HexaFreezeResult<i64> {
+        // We know, that the epoch cant be in the future, since it's checked at when a generator is created.
+        let ts = now - self.epoch;
 
-        // Earliest time, where it is acceptable to not sleep.
-        let earliest_acceptable = last_reset_micros + constants::MINIMUM_TIME_BETWEEN_RESET_MICROS;
-
-        let sleep_time = earliest_acceptable - now;
-        if sleep_time > 0 {
-            // This is ok, because `sleep_time` is always above 0 AND
-            // `sleep_time` is always smaller than `constants::MINIMUM_TIME_BETWEEN_RESET_MICROS`,
-            // assuming, that `last_reset_micros` is in the past.
-            #[allow(clippy::cast_sign_loss)]
-            thread::sleep(time::Duration::from_micros(sleep_time as u64));
-            return (true, sleep_time);
+        if ts > chrono::Duration::from_std(constants::MAX_TIMESTAMP).unwrap() {
+            return Err(HexaFreezeError::EpochTooFarInThePast);
         }
-        return (false, 0);
-    }
 
-    fn create_id(&self, ts_micros: i64, seq: i64) -> GeneratorResponse {
-        let since_epoch_millis = (ts_micros - self.epoch_micros).div_euclid(1000);
-        if since_epoch_millis < 0 {
-            return Err(GeneratorError::EpochInTheFuture);
-        };
-        if since_epoch_millis > constants::MAX_TIMESTAMP_MILLIS {
-            return Err(GeneratorError::EpochTooFarInThePast);
-        };
-        return Ok(util::create_snowflake(
-            since_epoch_millis,
-            self.node_id,
-            seq,
-        ));
+        Ok((ts.num_milliseconds() << constants::TIMESTAMP_SHIFT)
+            | (self.node_id << constants::INSTANCE_SHIFT)
+            | (seq << constants::SEQUENCE_SHIFT))
     }
 }
 

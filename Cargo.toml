@@ -15,20 +15,14 @@ resolver = "2"
 [dependencies]
 chrono = "0.4"
 log = "0.4"
-tokio = {version = "1.24", features = ["sync"]}
+tokio = {version = "1.24", features = ["sync", "rt", "time"]}
 once_cell = "1.17"
 spin_sleep = "1.1"
-
-[dev-dependencies]
-tokio = {version = "1.24", features = ["sync", "rt-multi-thread", "macros", "time"]}
-dashmap = "5.4.0"
-num_cpus = "1.1"
-env_logger = "0.10"
-criterion = "0.4.0"
 
 [profile.release]
 debug = true
 
-[[bench]]
-name = "generation"
-harness = false
+[dev_dependencies]
+tokio = {version = "1.24", features = ["rt-multi-thread", "macros"]}
+num_cpus = "1.15"
+dashmap = "5.4"
