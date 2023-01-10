@@ -2,7 +2,7 @@
 A library to asynchronously generate Snowflake IDs.
 
 # What is a snowflake
-Snowflakes where developed by twitter for creating time sortable ids, which where able to be quickly generated without syncronisation even in distributed compute clusters.
+Snowflakes were developed by twitter for creating time sortable ids, which are able to be quickly generated without syncronisation even in distributed compute clusters.
 
 Snowflakes have the following layout:
 
@@ -17,7 +17,7 @@ tokio = {version = "1", features = ["full"]}
 ```
 
 [`Generator`] is the interface for the generation of snowflakes.
-Snowflakes require an `epoch`, basically the start time of the Snowflake, it needs to be in the past, and less than ~ 69 years ago. [`DEFAULT_EPOCH`] should be fine for most applications until 2079.
+Snowflakes require an `epoch`, basically the start time of the Snowflake, it needs to be in the past and be less than ~ 69 years ago. [`DEFAULT_EPOCH`] should be fine for most applications until 2079.
 It is thread-safe, therefore you do not need a Mutex to contain it.
 It is recommend to use the same generator in all places in a rust application, something like `once_cell` may be useful for this.
 ```rust

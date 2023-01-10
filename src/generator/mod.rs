@@ -70,10 +70,10 @@ impl Generator {
     /// 
     /// # Errors
     /// It is generally ok to call `unwrap()` on this Result.
-    /// Since it only errors ...
-    /// * When the epoch is more than ~69 years ago.
-    /// * When you have generated more than `9_223_372_036_854_775_807` ids. (In total, for this generator)
-    /// * When your clock jumps backward in time a significant amount.
+    /// Since it only errors when:
+    /// * the epoch is more than ~69 years ago.
+    /// * you have generated more than `9_223_372_036_854_775_807` ids. (In total, for this generator)
+    /// * your clock jumps backward in time a significant amount.
     pub async fn generate(&self) -> HexaFreezeResult<i64> {
         let mut i = self.increment.lock().await;
         self.distribute_sleep().await;
