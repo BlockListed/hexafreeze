@@ -22,7 +22,7 @@ spin_sleep = "1.1"
 [profile.release]
 debug = true
 
-[dev_dependencies]
+[dev-dependencies]
 tokio = {version = "1.24", features = ["rt-multi-thread", "macros"]}
 num_cpus = "1.15"
 dashmap = "5.4"
