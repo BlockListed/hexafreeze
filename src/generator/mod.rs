@@ -85,13 +85,7 @@ impl Generator {
 
     async fn distribute_sleep(&self) {
         if self.distribute_sleep.load(Ordering::Relaxed) {
-            tokio::task::spawn_blocking(|| {
-                spin_sleep::SpinSleeper::new(100_000)
-                    .with_spin_strategy(spin_sleep::SpinStrategy::YieldThread)
-                    .sleep(constants::DISTRIBUTED_SLEEP_TIME);
-            })
-            .await
-            .unwrap();
+            util::accurate_sleep(constants::DISTRIBUTED_SLEEP_TIME).await;
         }
     }
 
@@ -114,7 +108,7 @@ impl Generator {
 
             if delta < chrono::Duration::milliseconds(1) {
                 // Safe to unwrap, because we know its below a millisecond and that it's bigger than 0.
-                tokio::time::sleep(delta.to_std().unwrap()).await;
+                util::accurate_sleep(delta.to_std().unwrap()).await;
                 self.distribute_sleep.store(true, Ordering::Relaxed);
 
                 // No .abs(), because we know its bigger than 0
