@@ -27,3 +27,11 @@ debug = true
 tokio = {version = "1.24", features = ["rt-multi-thread", "macros"]}
 num_cpus = "1.15"
 dashmap = "5.4"
+criterion = {version = "0.3", features = ["async_tokio"]}
+
+[lib]
+bench = false
+
+[[bench]]
+name = "generate_a_lot"
+harness = false
