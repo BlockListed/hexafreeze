@@ -2,8 +2,28 @@ use chrono::{DateTime, Utc};
 
 #[test]
 fn invalid_epoch() {
-    assert_eq!(crate::Generator::new(0, DateTime::parse_from_rfc3339("2177-01-01T00:00:00Z").unwrap().with_timezone(&Utc)).err().unwrap(), crate::HexaFreezeError::EpochInTheFuture);
-    assert_eq!(crate::Generator::new(0, DateTime::parse_from_rfc3339("1930-01-01T00:00:00Z").unwrap().with_timezone(&Utc)).err().unwrap(), crate::HexaFreezeError::EpochTooFarInThePast);
+    assert_eq!(
+        crate::Generator::new(
+            0,
+            DateTime::parse_from_rfc3339("2177-01-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc)
+        )
+        .err()
+        .unwrap(),
+        crate::HexaFreezeError::EpochInTheFuture
+    );
+    assert_eq!(
+        crate::Generator::new(
+            0,
+            DateTime::parse_from_rfc3339("1930-01-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc)
+        )
+        .err()
+        .unwrap(),
+        crate::HexaFreezeError::EpochTooFarInThePast
+    );
 }
 
 #[test]

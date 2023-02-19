@@ -9,7 +9,9 @@ pub fn now() -> chrono::DateTime<Utc> {
 pub async fn accurate_sleep(duration: std::time::Duration) {
     tokio::task::spawn_blocking(move || {
         SpinSleeper::new(100_000)
-        .with_spin_strategy(SpinStrategy::YieldThread)
-        .sleep(duration);
-    }).await.expect("Sleeping failed!"); 
+            .with_spin_strategy(SpinStrategy::YieldThread)
+            .sleep(duration);
+    })
+    .await
+    .expect("Sleeping failed!");
 }
