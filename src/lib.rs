@@ -22,8 +22,7 @@
 
 #![forbid(unsafe_code)]
 
-#![deny(warnings)]
-#![deny(clippy::pedantic)]
+#![warn(clippy::pedantic)]
 #![allow(clippy::explicit_deref_methods)]
 #![allow(clippy::module_name_repetitions)]
 

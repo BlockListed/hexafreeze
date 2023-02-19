@@ -19,6 +19,7 @@ tokio = {version = "1", features = ["sync", "rt", "time"]}
 once_cell = "1.17"
 spin_sleep = "1.1"
 thiserror = "1.0"
+tracing = "0.1"
 
 [profile.release]
 debug = true
@@ -27,3 +28,12 @@ debug = true
 tokio = {version = "1.24", features = ["rt-multi-thread", "macros"]}
 num_cpus = "1.15"
 dashmap = "5.4"
+criterion = {version = "0.3", features = ["async_tokio"]}
+tracing-subscriber = {version = "0.3", features = ["env-filter"]}
+
+[lib]
+bench = false
+
+[[bench]]
+name = "generate_a_lot"
+harness = false
