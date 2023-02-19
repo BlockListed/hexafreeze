@@ -19,16 +19,11 @@
 // TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 #![forbid(unsafe_code)]
-
 #![warn(clippy::pedantic)]
 #![allow(clippy::explicit_deref_methods)]
 #![allow(clippy::module_name_repetitions)]
-
 #![doc = include_str!("../README.md")]
-
-
 
 mod constants;
 mod error;
@@ -37,4 +32,3 @@ mod generator;
 pub use constants::DEFAULT_EPOCH;
 pub use error::*;
 pub use generator::Generator;
-

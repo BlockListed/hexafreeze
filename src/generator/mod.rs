@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::time::Instant;
 use tokio::sync::Mutex;
+use tokio::time::Instant;
 
 mod checks;
 mod util;
@@ -26,14 +26,14 @@ pub struct Generator {
 
 impl Generator {
     /// Creates a new generator with your desired configuration.
-    /// 
+    ///
     /// # Example
     /// ```rust
     /// use hexafreeze::{Generator, DEFAULT_EPOCH};
-    /// 
+    ///
     /// let generator = Generator::new(0, *DEFAULT_EPOCH);
     /// ```
-    /// 
+    ///
     /// # Errors
     /// * When `node_id` is bigger than 1024
     /// * When the epoch is more than ~69 years ago.
@@ -58,18 +58,18 @@ impl Generator {
     }
 
     /// Generates a new snowflake ID
-    /// 
+    ///
     /// # Example
     /// ```rust
     /// use hexafreeze::{Generator, DEFAULT_EPOCH};
-    /// 
+    ///
     /// # tokio::runtime::Runtime::new().unwrap().block_on(async {
     /// let generator = Generator::new(0, *DEFAULT_EPOCH).unwrap();
-    /// 
+    ///
     /// let id = generator.generate().await.unwrap();
     /// # })
     /// ```
-    /// 
+    ///
     /// # Errors
     /// It is generally ok to call `unwrap()` on this Result.
     /// Since it only errors when:
@@ -89,7 +89,12 @@ impl Generator {
     async fn distribute_sleep(&self, start: Instant) {
         if self.distribute_sleep.load(Ordering::Relaxed) {
             // Start is required to make sure, that we only sleep the necessary amount of time.
-            util::accurate_sleep(constants::DISTRIBUTED_SLEEP_TIME.checked_sub(start.elapsed()).unwrap_or(Duration::ZERO)).await;
+            util::accurate_sleep(
+                constants::DISTRIBUTED_SLEEP_TIME
+                    .checked_sub(start.elapsed())
+                    .unwrap_or(Duration::ZERO),
+            )
+            .await;
         }
     }
 
@@ -113,7 +118,9 @@ impl Generator {
             if delta < chrono::Duration::milliseconds(1) {
                 // Safe to unwrap, because we know its below a millisecond and that it's bigger than 0.
                 tokio::time::sleep(delta.to_std().unwrap()).await;
-                tracing::debug!("Sleeping, because more than 4095 IDs/microsecond are being generated!");
+                tracing::debug!(
+                    "Sleeping, because more than 4095 IDs/microsecond are being generated!"
+                );
                 self.distribute_sleep.store(true, Ordering::Relaxed);
                 tracing::trace!("Enabled distributed sleep!");
 
