@@ -3,7 +3,9 @@ use std::mem::replace;
 use std::ops::DerefMut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
+use tokio::time::Instant;
 use tokio::sync::Mutex;
 
 mod checks;
@@ -75,17 +77,19 @@ impl Generator {
     /// * you have generated more than `9_223_372_036_854_775_807` ids. (In total, for this generator)
     /// * your clock jumps backward in time a significant amount.
     pub async fn generate(&self) -> HexaFreezeResult<i64> {
+        let start = Instant::now();
         let mut i = self.increment.lock().await;
-        self.distribute_sleep().await;
+        self.distribute_sleep(start).await;
         let (seq, now) = self.get_sequence(i.deref_mut()).await?;
         drop(i);
 
         self.create_id(now, seq)
     }
 
-    async fn distribute_sleep(&self) {
+    async fn distribute_sleep(&self, start: Instant) {
         if self.distribute_sleep.load(Ordering::Relaxed) {
-            util::accurate_sleep(constants::DISTRIBUTED_SLEEP_TIME).await;
+            // Start is required to make sure, that we only sleep the necessary amount of time.
+            util::accurate_sleep(constants::DISTRIBUTED_SLEEP_TIME.checked_sub(start.elapsed()).unwrap_or(Duration::ZERO)).await;
         }
     }
 
@@ -108,14 +112,18 @@ impl Generator {
 
             if delta < chrono::Duration::milliseconds(1) {
                 // Safe to unwrap, because we know its below a millisecond and that it's bigger than 0.
-                util::accurate_sleep(delta.to_std().unwrap()).await;
+                tokio::time::sleep(delta.to_std().unwrap()).await;
+                tracing::debug!("Sleeping, because more than 4095 IDs/microsecond are being generated!");
                 self.distribute_sleep.store(true, Ordering::Relaxed);
+                tracing::trace!("Enabled distributed sleep!");
 
                 // No .abs(), because we know its bigger than 0
                 return Ok((seq, now + delta));
             }
 
-            self.distribute_sleep.store(false, Ordering::Relaxed);
+            if self.distribute_sleep.swap(false, Ordering::Relaxed) {
+                tracing::trace!("Disabled distributed sleep!");
+            }
         }
 
         Ok((seq, now))
