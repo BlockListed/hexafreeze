@@ -35,7 +35,7 @@ impl Generator {
     /// ```
     ///
     /// # Errors
-    /// * When `node_id` is bigger than 1024
+    /// * When `node_id` is bigger than 1023
     /// * When the epoch is more than ~69 years ago.
     /// * When the epoch is in the future.
     // Ok since it it a string literal and this function is unit tested to not panic.
