@@ -12,7 +12,7 @@ Snowflakes have the following layout:
 First you need to include dependencies. These are the recommended features. Tokio may be slimmed down by enabling individual features instead of `full`.
 ```ignore
 [dependencies]
-hexafreeze = "0.3"
+hexafreeze = "0.4"
 tokio = {version = "1", features = ["full"]}
 ```
 
