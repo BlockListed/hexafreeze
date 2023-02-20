@@ -6,7 +6,7 @@ pub enum HexaFreezeError {
     EpochInTheFuture,
     #[error("Epoch is too far in the past!")]
     EpochTooFarInThePast,
-    #[error("The node_id is too large / greater than 4095!")]
+    #[error("The node_id is too large / greater than 1023!")]
     NodeIdTooLarge,
     #[error("Your clock jumped backwards in time!")]
     ClockWentBackInTime,

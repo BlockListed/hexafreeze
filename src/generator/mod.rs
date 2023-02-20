@@ -119,7 +119,7 @@ impl Generator {
                 // Safe to unwrap, because we know its below a millisecond and that it's bigger than 0.
                 tokio::time::sleep(delta.to_std().unwrap()).await;
                 tracing::debug!(
-                    "Sleeping, because more than 4095 IDs/microsecond are being generated!"
+                    "Sleeping, because generator is overloaded. (Rate higher than 4096 IDs/millisecond)"
                 );
                 self.distribute_sleep.store(true, Ordering::Relaxed);
                 tracing::trace!("Enabled distributed sleep!");
