@@ -1,8 +1,15 @@
 #![allow(dead_code)]
 
-use chrono::prelude::{DateTime, Utc};
 use once_cell::sync::Lazy;
+use crate::generator::nano::Time;
 use std::time::Duration;
+use uom::si::time::millisecond;
+
+macro_rules! static_time {
+    ($name:ident, $t:ty, $v:expr) => {
+        pub static $name: Lazy<Time> = Lazy::new(|| Time::new::<$t>($v));
+    }
+}
 
 // i64, because it operates on another i64,
 // so conversion would be necessary.
@@ -21,15 +28,15 @@ pub const DISTRIBUTED_SLEEP_TIME: Duration =
     Duration::from_nanos(10u64.pow(6) / RESET_INCREMENT as u64);
 
 // Snowflake constants
-pub const MAX_TIMESTAMP: Duration = Duration::from_millis((1 << 41) - 1);
+// Function, since this is very cheap.
+static_time!(MAX_TIMESTAMP, millisecond, (1 << 41) - 1);
+
 pub const MAX_NODE_ID: i64 = (1 << 10) - 1;
 
-pub const MINIMUM_TIME_BETWEEN_RESET: Duration = Duration::from_secs(1);
+static_time!(MINIMUM_TIME_BETWEEN_RESET, millisecond, 1);
+static_time!(MILLISECOND, millisecond, 1);
 
 pub const DEFAULT_BUFFER_SIZE: usize = 16;
 
-pub static DEFAULT_EPOCH: Lazy<DateTime<Utc>> = Lazy::new(|| {
-    DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
-        .unwrap()
-        .into()
-});
+/// 2020-01-01T00:00:00Z
+pub const DEFAULT_EPOCH: i64 = 1_577_833_200_000;

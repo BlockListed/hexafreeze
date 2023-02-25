@@ -1,4 +1,3 @@
-use chrono::prelude::*;
 use std::mem::replace;
 use std::ops::DerefMut;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,19 +7,25 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 
+use uom::si::time::{millisecond, nanosecond};
+
 mod checks;
 mod util;
+
+pub mod nano;
+
+use nano::Time;
 
 use crate::HexaFreezeError;
 use crate::{constants, error::HexaFreezeResult};
 
 #[derive(Clone)]
 pub struct Generator {
-    epoch: DateTime<Utc>,
+    epoch: Time,
     node_id: i64,
     increment: Arc<Mutex<i64>>,
 
-    last_reset: Arc<Mutex<DateTime<Utc>>>,
+    last_reset: Arc<Mutex<Time>>,
     distribute_sleep: Arc<AtomicBool>,
 }
 
@@ -31,28 +36,24 @@ impl Generator {
     /// ```rust
     /// use hexafreeze::{Generator, DEFAULT_EPOCH};
     ///
-    /// let generator = Generator::new(0, *DEFAULT_EPOCH);
+    /// let generator = Generator::new(0, DEFAULT_EPOCH);
     /// ```
     ///
     /// # Errors
     /// * When `node_id` is bigger than 1023
-    /// * When the epoch is more than ~69 years ago.
-    /// * When the epoch is in the future.
+    /// * When the epoch_millis is more than ~69 years ago.
+    /// * When the epoch_millis is in the future.
     // Ok since it it a string literal and this function is unit tested to not panic.
     #[allow(clippy::missing_panics_doc)]
-    pub fn new(node_id: i64, epoch: DateTime<Utc>) -> HexaFreezeResult<Self> {
+    pub fn new(node_id: i64, epoch_millis: i64) -> HexaFreezeResult<Self> {
+        let epoch = Time::new::<millisecond>(epoch_millis);
         checks::check_node_id(node_id)?;
         checks::check_epoch(epoch)?;
-
         Ok(Self {
             epoch,
             node_id,
             increment: Arc::new(Mutex::new(0)),
-            last_reset: Arc::new(Mutex::new(
-                DateTime::parse_from_rfc3339("0000-01-01T00:00:00Z")
-                    .unwrap()
-                    .with_timezone(&Utc),
-            )),
+            last_reset: Arc::new(Mutex::new(Time::new::<nanosecond>(0))),
             distribute_sleep: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -64,7 +65,7 @@ impl Generator {
     /// use hexafreeze::{Generator, DEFAULT_EPOCH};
     ///
     /// # tokio::runtime::Runtime::new().unwrap().block_on(async {
-    /// let generator = Generator::new(0, *DEFAULT_EPOCH).unwrap();
+    /// let generator = Generator::new(0, DEFAULT_EPOCH).unwrap();
     ///
     /// let id = generator.generate().await.unwrap();
     /// # })
@@ -98,7 +99,7 @@ impl Generator {
         }
     }
 
-    async fn get_sequence(&self, inc: &mut i64) -> HexaFreezeResult<(i64, DateTime<Utc>)> {
+    async fn get_sequence(&self, inc: &mut i64) -> HexaFreezeResult<(i64, Time)> {
         let now = util::now();
         let seq = *inc % constants::RESET_INCREMENT;
         if *inc == i64::MAX {
@@ -109,15 +110,15 @@ impl Generator {
         if seq == 0 {
             let last = replace(self.last_reset.lock().await.deref_mut(), now);
 
-            let delta = now - last;
+            let delta: Time = now - last;
 
-            if delta < chrono::Duration::seconds(0) {
+            if delta < Time::new::<nanosecond>(0) {
                 return Err(HexaFreezeError::ClockWentBackInTime);
             }
 
-            if delta < chrono::Duration::milliseconds(1) {
+            if now < (last + *constants::MINIMUM_TIME_BETWEEN_RESET) {
                 // Safe to unwrap, because we know its below a millisecond and that it's bigger than 0.
-                tokio::time::sleep(delta.to_std().unwrap()).await;
+                tokio::time::sleep(Duration::from_nanos(util::next_millisecond(now).value as u64)).await;
                 tracing::debug!(
                     "Sleeping, because generator is overloaded. (Rate higher than 4096 IDs/millisecond)"
                 );
@@ -136,17 +137,21 @@ impl Generator {
         Ok((seq, now))
     }
 
-    fn create_id(&self, now: DateTime<Utc>, seq: i64) -> HexaFreezeResult<i64> {
+    #[tracing::instrument(level = "trace", skip(self))]
+    fn create_id(&self, now: Time, seq: i64) -> HexaFreezeResult<i64> {
         // We know, that the epoch cant be in the future, since it's checked at when a generator is created.
         let ts = now - self.epoch;
+        tracing::trace!("Calculated timestamp!");
 
-        if ts > chrono::Duration::from_std(constants::MAX_TIMESTAMP).unwrap() {
+        if ts > *constants::MAX_TIMESTAMP {
             return Err(HexaFreezeError::EpochTooFarInThePast);
         }
+        tracing::trace!("Checked timestamp against constant!");
 
-        Ok((ts.num_milliseconds() << constants::TIMESTAMP_SHIFT)
+        let id = (((ts.value / 1_000_000) as i64) << constants::TIMESTAMP_SHIFT)
             | (self.node_id << constants::INSTANCE_SHIFT)
-            | (seq << constants::SEQUENCE_SHIFT))
+            | (seq << constants::SEQUENCE_SHIFT);
+        Ok(id)
     }
 }
 

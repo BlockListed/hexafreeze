@@ -10,7 +10,7 @@ fn setup_logging() {
 }
 
 fn setup_generator() -> hexafreeze::Generator {
-    hexafreeze::Generator::new(0, *hexafreeze::DEFAULT_EPOCH).unwrap()
+    hexafreeze::Generator::new(0, hexafreeze::DEFAULT_EPOCH).unwrap()
 }
 
 fn setup_runtime() -> tokio::runtime::Runtime {
