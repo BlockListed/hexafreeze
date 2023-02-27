@@ -1,31 +1,28 @@
-use std::mem::replace;
 use std::ops::DerefMut;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 
-use uom::si::time::{millisecond, nanosecond};
-
 mod checks;
 mod util;
 
 pub mod nano;
 
-use nano::Time;
+use nano::{Nanosecond, Millisecond};
 
 use crate::HexaFreezeError;
 use crate::{constants, error::HexaFreezeResult};
 
 #[derive(Clone)]
 pub struct Generator {
-    epoch: Time,
+    epoch: Nanosecond,
     node_id: i64,
     increment: Arc<Mutex<i64>>,
 
-    last_reset: Arc<Mutex<Time>>,
+    last_reset_millis: Arc<[AtomicI64; 4096]>,
     distribute_sleep: Arc<AtomicBool>,
 }
 
@@ -46,14 +43,16 @@ impl Generator {
     // Ok since it it a string literal and this function is unit tested to not panic.
     #[allow(clippy::missing_panics_doc)]
     pub fn new(node_id: i64, epoch_millis: i64) -> HexaFreezeResult<Self> {
-        let epoch = Time::new::<millisecond>(epoch_millis);
+        let epoch = Nanosecond::from_millis(epoch_millis);
         checks::check_node_id(node_id)?;
         checks::check_epoch(epoch)?;
+
+        const ATOMIC_I64_ZERO: AtomicI64 = AtomicI64::new(0);
         Ok(Self {
             epoch,
             node_id,
             increment: Arc::new(Mutex::new(0)),
-            last_reset: Arc::new(Mutex::new(Time::new::<nanosecond>(0))),
+            last_reset_millis: Arc::new([ATOMIC_I64_ZERO; 4096]),
             distribute_sleep: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -99,56 +98,49 @@ impl Generator {
         }
     }
 
-    async fn get_sequence(&self, inc: &mut i64) -> HexaFreezeResult<(i64, Time)> {
-        let now = util::now();
+    async fn get_sequence(&self, inc: &mut i64) -> HexaFreezeResult<(i64, Nanosecond)> {
+        let now: Millisecond = util::now().into();
         let seq = *inc % constants::RESET_INCREMENT;
         if *inc == i64::MAX {
             return Err(HexaFreezeError::Surpassed64BitLimit);
         }
         *inc += 1;
 
-        if seq == 0 {
-            let last = replace(self.last_reset.lock().await.deref_mut(), now);
+        let last = Millisecond(self.last_reset_millis[seq as usize].swap(now.0, Ordering::Relaxed));
 
-            let delta: Time = now - last;
-
-            if delta < Time::new::<nanosecond>(0) {
-                return Err(HexaFreezeError::ClockWentBackInTime);
-            }
-
-            if now < (last + *constants::MINIMUM_TIME_BETWEEN_RESET) {
-                // Safe to unwrap, because we know its below a millisecond and that it's bigger than 0.
-                tokio::time::sleep(Duration::from_nanos(util::next_millisecond(now).value as u64)).await;
-                tracing::debug!(
-                    "Sleeping, because generator is overloaded. (Rate higher than 4096 IDs/millisecond)"
-                );
-                self.distribute_sleep.store(true, Ordering::Relaxed);
-                tracing::trace!("Enabled distributed sleep!");
-
-                // No .abs(), because we know its bigger than 0
-                return Ok((seq, now + delta));
-            }
-
-            if self.distribute_sleep.swap(false, Ordering::Relaxed) {
-                tracing::trace!("Disabled distributed sleep!");
-            }
+        tracing::trace!(?now, ?last, seq);
+        if now < last {
+            return Err(HexaFreezeError::ClockWentBackInTime);
         }
 
-        Ok((seq, now))
+        if last == now {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+            tracing::debug!(
+                "Sleeping, because generator is overloaded. (Rate higher than 4096 IDs/millisecond)"
+            );
+            self.distribute_sleep.store(true, Ordering::Relaxed);
+            tracing::trace!("Enabled distributed sleep!");
+
+            // No .abs(), because we know its bigger than 0
+            return Ok((seq, util::now()));
+        }
+
+        if self.distribute_sleep.swap(false, Ordering::Relaxed) {
+            tracing::trace!("Disabled distributed sleep!");
+        }
+
+        Ok((seq, (now+Millisecond(1)).into()))
     }
 
-    #[tracing::instrument(level = "trace", skip(self))]
-    fn create_id(&self, now: Time, seq: i64) -> HexaFreezeResult<i64> {
+    fn create_id(&self, now: Nanosecond, seq: i64) -> HexaFreezeResult<i64> {
         // We know, that the epoch cant be in the future, since it's checked at when a generator is created.
         let ts = now - self.epoch;
-        tracing::trace!("Calculated timestamp!");
 
-        if ts > *constants::MAX_TIMESTAMP {
+        if ts > constants::MAX_TIMESTAMP {
             return Err(HexaFreezeError::EpochTooFarInThePast);
         }
-        tracing::trace!("Checked timestamp against constant!");
 
-        let id = (((ts.value / 1_000_000) as i64) << constants::TIMESTAMP_SHIFT)
+        let id = (((ts.into_millis()) as i64) << constants::TIMESTAMP_SHIFT)
             | (self.node_id << constants::INSTANCE_SHIFT)
             | (seq << constants::SEQUENCE_SHIFT);
         Ok(id)

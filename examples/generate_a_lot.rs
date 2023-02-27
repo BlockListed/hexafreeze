@@ -3,6 +3,7 @@
 
 use hexafreeze::Generator;
 use hexafreeze::DEFAULT_EPOCH;
+use tokio::time::Instant;
 use std::sync::{
     atomic::{AtomicI64, Ordering},
     Arc,
@@ -17,6 +18,7 @@ async fn main() {
 
     let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
+    let start = Instant::now();
     for _ in 0..num_cpus::get() {
         let c = Arc::clone(&counter);
         let g = generator.clone();
@@ -31,4 +33,5 @@ async fn main() {
     for h in handles {
         h.await.unwrap();
     }
+    eprintln!("Spent {}ms generating!", start.elapsed().as_millis());
 }

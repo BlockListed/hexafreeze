@@ -1,15 +1,7 @@
 #![allow(dead_code)]
 
-use once_cell::sync::Lazy;
-use crate::generator::nano::Time;
+use crate::generator::nano::Nanosecond;
 use std::time::Duration;
-use uom::si::time::millisecond;
-
-macro_rules! static_time {
-    ($name:ident, $t:ty, $v:expr) => {
-        pub static $name: Lazy<Time> = Lazy::new(|| Time::new::<$t>($v));
-    }
-}
 
 // i64, because it operates on another i64,
 // so conversion would be necessary.
@@ -29,12 +21,12 @@ pub const DISTRIBUTED_SLEEP_TIME: Duration =
 
 // Snowflake constants
 // Function, since this is very cheap.
-static_time!(MAX_TIMESTAMP, millisecond, (1 << 41) - 1);
+pub const MAX_TIMESTAMP: Nanosecond = Nanosecond::from_millis((1 << 41) - 1);
 
 pub const MAX_NODE_ID: i64 = (1 << 10) - 1;
 
-static_time!(MINIMUM_TIME_BETWEEN_RESET, millisecond, 1);
-static_time!(MILLISECOND, millisecond, 1);
+pub const MINIMUM_TIME_BETWEEN_RESET: Nanosecond = Nanosecond::from_millis(1);
+pub const MILLISECOND: Nanosecond = Nanosecond::from_millis(1);
 
 pub const DEFAULT_BUFFER_SIZE: usize = 16;
 

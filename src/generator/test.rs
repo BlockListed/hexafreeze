@@ -29,7 +29,7 @@ async fn duplicate_generation_test() {
         Arc,
     };
 
-    const ID_COUNT: usize = 4_096_0;
+    const ID_COUNT: usize = 4_096_000;
 
     let generator = Generator::new(10, DEFAULT_EPOCH).unwrap();
     let counter = Arc::new(AtomicUsize::new(0));
@@ -46,7 +46,7 @@ async fn duplicate_generation_test() {
             while c.fetch_add(1, Ordering::AcqRel) < ID_COUNT {
                 let id = g.generate().await.unwrap();
                 if !m.insert(id) {
-                    panic!("Big Oof a squidoosh squidoodle happened and we created a duplicate ID");
+                    panic!("Big Oof a squidoosh squidoodle happened and we created a duplicate ID. {}", id);
                 }
             }
         }));
