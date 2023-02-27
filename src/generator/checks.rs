@@ -1,7 +1,7 @@
 use crate::{
-    generator::nano::Nanosecond,
     constants,
     error::{HexaFreezeError, HexaFreezeResult},
+    generator::nano::Nanosecond,
 };
 
 pub const fn check_node_id(id: i64) -> HexaFreezeResult<()> {

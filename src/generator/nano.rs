@@ -1,4 +1,4 @@
-use std::ops::{Sub, Add};
+use std::ops::{Add, Sub};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Nanosecond(pub i64);
@@ -39,19 +39,19 @@ pub struct Millisecond(pub i64);
 impl Sub<Self> for Millisecond {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0-rhs.0)
+        Self(self.0 - rhs.0)
     }
 }
 
 impl Add<Self> for Millisecond {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
-        Self(self.0+rhs.0)
+        Self(self.0 + rhs.0)
     }
 }
 
 impl Into<Nanosecond> for Millisecond {
     fn into(self) -> Nanosecond {
-        Nanosecond(self.0*1_000_000)
+        Nanosecond(self.0 * 1_000_000)
     }
 }

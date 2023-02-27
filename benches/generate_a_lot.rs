@@ -4,14 +4,13 @@ use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 fn setup_logging() -> impl Drop {
     let (flame, _guard) = tracing_flame::FlameLayer::with_file("./tracing.flame").unwrap();
 
-    let subscriber  =tracing_subscriber::Registry::default()
-        .with(flame);
+    let subscriber = tracing_subscriber::Registry::default().with(flame);
     let _ = tracing::subscriber::set_global_default(subscriber);
     _guard
 }
 
 fn setup_generator() -> hexafreeze::Generator {
-    hexafreeze::Generator::new(0, hexafreeze::DEFAULT_EPOCH).unwrap()
+    hexafreeze::Generator::new(0, *hexafreeze::DEFAULT_EPOCH).unwrap()
 }
 
 fn setup_runtime() -> tokio::runtime::Runtime {

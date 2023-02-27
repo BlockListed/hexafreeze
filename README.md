@@ -27,7 +27,8 @@ use hexafreeze::DEFAULT_EPOCH;
 #[tokio::main]
 async fn main() {
     // If your system is not distributed using `0` as the `node_id` is perfectly fine.
-    let gen = Generator::new(0, DEFAULT_EPOCH).unwrap();
+    // The `DEFAULT_EPOCH` always needs to be dereferenced.
+    let gen = Generator::new(0, *DEFAULT_EPOCH).unwrap();
 
     // The `generate` function is async and non-blocking.
     let id: i64 = gen.generate().await.unwrap();

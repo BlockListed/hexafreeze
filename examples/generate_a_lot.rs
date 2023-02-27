@@ -3,17 +3,17 @@
 
 use hexafreeze::Generator;
 use hexafreeze::DEFAULT_EPOCH;
-use tokio::time::Instant;
 use std::sync::{
     atomic::{AtomicI64, Ordering},
     Arc,
 };
+use tokio::time::Instant;
 
 const ID_COUNT: i64 = 4_096_000;
 
 #[tokio::main]
 async fn main() {
-    let generator = Generator::new(10, DEFAULT_EPOCH).unwrap();
+    let generator = Generator::new(10, *DEFAULT_EPOCH).unwrap();
     let counter = Arc::new(AtomicI64::new(0));
 
     let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();

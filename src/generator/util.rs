@@ -1,13 +1,13 @@
+use crate::generator::nano::Nanosecond;
 use spin_sleep::{SpinSleeper, SpinStrategy};
 use std::time::*;
-use crate::generator::nano::Nanosecond;
 
 pub fn now() -> Nanosecond {
     Nanosecond(
         SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as i64,
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as i64,
     )
 }
 

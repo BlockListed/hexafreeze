@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 
 use crate::generator::nano::Nanosecond;
+use chrono::prelude::*;
+use once_cell::sync::Lazy;
 use std::time::Duration;
 
 // i64, because it operates on another i64,
@@ -31,4 +33,10 @@ pub const MILLISECOND: Nanosecond = Nanosecond::from_millis(1);
 pub const DEFAULT_BUFFER_SIZE: usize = 16;
 
 /// 2020-01-01T00:00:00Z
-pub const DEFAULT_EPOCH: i64 = 1_577_833_200_000;
+pub static DEFAULT_EPOCH: Lazy<DateTime<Utc>> = Lazy::new(|| {
+    DateTime::parse_from_rfc3339("2020-01-01T00:00:00Z")
+        .unwrap()
+        .into()
+});
+// This should be replace the previous thing in 1.0.0
+//pub const DEFAULT_EPOCH: i64 = 1_577_833_200_000;

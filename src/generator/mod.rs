@@ -1,8 +1,9 @@
 use std::ops::DerefMut;
-use std::sync::atomic::{AtomicI64, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use chrono::{DateTime, Utc};
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 
@@ -11,7 +12,7 @@ mod util;
 
 pub mod nano;
 
-use nano::{Nanosecond, Millisecond};
+use nano::{Millisecond, Nanosecond};
 
 use crate::HexaFreezeError;
 use crate::{constants, error::HexaFreezeResult};
@@ -33,7 +34,7 @@ impl Generator {
     /// ```rust
     /// use hexafreeze::{Generator, DEFAULT_EPOCH};
     ///
-    /// let generator = Generator::new(0, DEFAULT_EPOCH);
+    /// let generator = Generator::new(0, *DEFAULT_EPOCH);
     /// ```
     ///
     /// # Errors
@@ -42,8 +43,8 @@ impl Generator {
     /// * When the epoch_millis is in the future.
     // Ok since it it a string literal and this function is unit tested to not panic.
     #[allow(clippy::missing_panics_doc)]
-    pub fn new(node_id: i64, epoch_millis: i64) -> HexaFreezeResult<Self> {
-        let epoch = Nanosecond::from_millis(epoch_millis);
+    pub fn new(node_id: i64, epoch: DateTime<Utc>) -> HexaFreezeResult<Self> {
+        let epoch = Nanosecond::from_millis(epoch.timestamp_millis());
         checks::check_node_id(node_id)?;
         checks::check_epoch(epoch)?;
 
@@ -64,7 +65,7 @@ impl Generator {
     /// use hexafreeze::{Generator, DEFAULT_EPOCH};
     ///
     /// # tokio::runtime::Runtime::new().unwrap().block_on(async {
-    /// let generator = Generator::new(0, DEFAULT_EPOCH).unwrap();
+    /// let generator = Generator::new(0, *DEFAULT_EPOCH).unwrap();
     ///
     /// let id = generator.generate().await.unwrap();
     /// # })
@@ -129,7 +130,7 @@ impl Generator {
             tracing::trace!("Disabled distributed sleep!");
         }
 
-        Ok((seq, (now+Millisecond(1)).into()))
+        Ok((seq, (now + Millisecond(1)).into()))
     }
 
     fn create_id(&self, now: Nanosecond, seq: i64) -> HexaFreezeResult<i64> {
