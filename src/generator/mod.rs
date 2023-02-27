@@ -109,7 +109,7 @@ impl Generator {
         *inc += 1;
 
         // `seq` will never be negative.
-        // It is only an i64, so it can be ORed in `create_id` without casting.
+        // It is an i64, so it can be ORed in `create_id` without casting.
         #[allow(clippy::cast_sign_loss)]
         let last = Millisecond(self.last_reset_millis[seq as usize].swap(now.0, Ordering::Relaxed));
 
