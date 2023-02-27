@@ -41,8 +41,6 @@ impl Generator {
     /// * When `node_id` is bigger than 1023
     /// * When the `epoch` is more than ~69 years ago.
     /// * When the `epoch` is in the future.
-    // Ok since it it a string literal and this function is unit tested to not panic.
-    #[allow(clippy::missing_panics_doc)]
     pub fn new(node_id: i64, epoch: DateTime<Utc>) -> HexaFreezeResult<Self> {
         // Fine, since this is only used for list initialization and is an alternative to ´std::sync::atomic::ATOMIC_I64_INIT´.
         #[allow(clippy::declare_interior_mutable_const)]
