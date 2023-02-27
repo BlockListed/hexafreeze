@@ -22,7 +22,6 @@ pub const DISTRIBUTED_SLEEP_TIME: Duration =
     Duration::from_nanos(10u64.pow(6) / RESET_INCREMENT as u64);
 
 // Snowflake constants
-// Function, since this is very cheap.
 pub const MAX_TIMESTAMP: Nanosecond = Nanosecond::from_millis((1 << 41) - 1);
 
 pub const MAX_NODE_ID: i64 = (1 << 10) - 1;
