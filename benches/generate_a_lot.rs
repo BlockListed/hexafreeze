@@ -1,12 +1,14 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 
-fn setup_logging() -> impl Drop {
-    let (flame, _guard) = tracing_flame::FlameLayer::with_file("./tracing.flame").unwrap();
-
-    let subscriber = tracing_subscriber::Registry::default().with(flame);
-    let _ = tracing::subscriber::set_global_default(subscriber);
-    _guard
+fn setup_logging() {
+    /* 
+    if tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter("TRACE")
+        .with_writer(std::fs::File::create("/tmp/benchmark.log").unwrap())
+        .try_init()
+        .is_ok()
+    {};
+    */
 }
 
 fn setup_generator() -> hexafreeze::Generator {

@@ -30,7 +30,6 @@ num_cpus = "1.15"
 dashmap = "5.4"
 criterion = {version = "0.3", features = ["async_tokio"]}
 tracing-subscriber = {version = "0.3", features = ["env-filter"]}
-tracing-flame = "0.2"
 test-log = { version = "0.2", default-features = false, features = ["trace"] }
 
 [lib]
