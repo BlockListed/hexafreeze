@@ -1,12 +1,14 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn setup_logging() {
+    /* 
     if tracing_subscriber::FmtSubscriber::builder()
         .with_env_filter("TRACE")
         .with_writer(std::fs::File::create("/tmp/benchmark.log").unwrap())
         .try_init()
         .is_ok()
     {};
+    */
 }
 
 fn setup_generator() -> hexafreeze::Generator {

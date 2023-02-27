@@ -7,6 +7,7 @@ use std::sync::{
     atomic::{AtomicI64, Ordering},
     Arc,
 };
+use tokio::time::Instant;
 
 const ID_COUNT: i64 = 4_096_000;
 
@@ -17,6 +18,7 @@ async fn main() {
 
     let mut handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
+    let start = Instant::now();
     for _ in 0..num_cpus::get() {
         let c = Arc::clone(&counter);
         let g = generator.clone();
@@ -31,4 +33,5 @@ async fn main() {
     for h in handles {
         h.await.unwrap();
     }
+    eprintln!("Spent {}ms generating!", start.elapsed().as_millis());
 }
