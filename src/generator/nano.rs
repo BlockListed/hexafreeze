@@ -8,7 +8,7 @@ impl Nanosecond {
         Self(millis * 1_000_000)
     }
 
-    pub const fn into_millis(&self) -> i64 {
+    pub const fn into_millis(self) -> i64 {
         self.0.div_euclid(1_000_000)
     }
 }
@@ -27,9 +27,9 @@ impl Add<Self> for Nanosecond {
     }
 }
 
-impl Into<Millisecond> for Nanosecond {
-    fn into(self) -> Millisecond {
-        Millisecond(self.into_millis())
+impl From<Nanosecond> for Millisecond {
+    fn from(val: Nanosecond) -> Self {
+        Millisecond(val.into_millis())
     }
 }
 
@@ -50,8 +50,8 @@ impl Add<Self> for Millisecond {
     }
 }
 
-impl Into<Nanosecond> for Millisecond {
-    fn into(self) -> Nanosecond {
-        Nanosecond(self.0 * 1_000_000)
+impl From<Millisecond> for Nanosecond {
+    fn from(val: Millisecond) -> Self {
+        Nanosecond(val.0 * 1_000_000)
     }
 }
