@@ -30,6 +30,7 @@ fn invalid_epoch() {
 fn node_id_validation() {
     assert!(crate::Generator::new(0, *crate::DEFAULT_EPOCH).is_ok());
     assert!(crate::Generator::new(214, *crate::DEFAULT_EPOCH).is_ok());
+    assert!(crate::Generator::new(-1, *crate::DEFAULT_EPOCH).is_err());
     assert!(crate::Generator::new(1026, *crate::DEFAULT_EPOCH).is_err());
 }
 
