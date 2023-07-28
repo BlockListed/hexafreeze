@@ -34,31 +34,28 @@ impl Generator {
     ///
     /// # Errors
     /// * When `node_id` is bigger than 1023
+    /// * When `node_id` is less than 0
     /// * When the `epoch` is more than ~69 years ago.
     /// * When the `epoch` is in the future.
     pub fn new(node_id: i64, epoch: DateTime<Utc>) -> HexaFreezeResult<Self> {
-        // Fine, since this is only used for list initialization and is an alternative to ´std::sync::atomic::ATOMIC_I64_INIT´.
-        #[allow(clippy::declare_interior_mutable_const)]
-        const ATOMIC_I64_ZERO: AtomicI64 = AtomicI64::new(0);
-
         let epoch = Nanosecond::from_millis(epoch.timestamp_millis());
         checks::check_node_id(node_id)?;
         checks::check_epoch(epoch)?;
+
+        // Fine, since this is only used for list initialization and is an alternative to ´std::sync::atomic::ATOMIC_I64_INIT´.
+        #[allow(clippy::declare_interior_mutable_const)]
+        const ATOMIC_I64_ZERO: AtomicI64 = AtomicI64::new(0);
 
         let inner = Arc::new(Inner {
             epoch,
             node_id,
             increment: Default::default(),
-            last_reset_millis: Arc::new([ATOMIC_I64_ZERO])
-
-        })
+            last_reset_millis: [ATOMIC_I64_ZERO; 4096],
+            distribute_sleep: Default::default(),
+        });
 
         Ok(Self {
-            epoch,
-            node_id,
-            increment: Arc::new(Mutex::new(0)),
-            last_reset_millis: Arc::new([ATOMIC_I64_ZERO; 4096]),
-            distribute_sleep: Arc::new(AtomicBool::new(false)),
+            inner,
         })
     }
 
@@ -83,7 +80,7 @@ impl Generator {
     /// * your clock jumps backward in time a significant amount.
     pub async fn generate(&self) -> HexaFreezeResult<i64> {
         let start = Instant::now();
-        let mut i = self.increment.lock().await;
+        let mut i = self.inner.increment.lock().await;
         self.distribute_sleep(start).await;
         let (seq, now) = self.get_sequence(i.deref_mut()).await?;
         drop(i);
@@ -92,7 +89,7 @@ impl Generator {
     }
 
     async fn distribute_sleep(&self, start: Instant) {
-        if self.distribute_sleep.load(Ordering::Relaxed) {
+        if self.inner.distribute_sleep.load(Ordering::Relaxed) {
             // Start is required to make sure, that we only sleep the necessary amount of time.
             util::accurate_sleep(
                 constants::DISTRIBUTED_SLEEP_TIME
@@ -114,7 +111,7 @@ impl Generator {
         // `seq` will never be negative.
         // It is an i64, so it can be ORed in `create_id` without casting.
         #[allow(clippy::cast_sign_loss)]
-        let last = Millisecond(self.last_reset_millis[seq as usize].swap(now.0, Ordering::Relaxed));
+        let last = Millisecond(self.inner.last_reset_millis[seq as usize].swap(now.0, Ordering::Relaxed));
 
         tracing::trace!(?now, ?last, seq);
         if now < last {
@@ -126,14 +123,14 @@ impl Generator {
             tracing::debug!(
                 "Sleeping, because generator is overloaded. (Rate higher than 4096 IDs/millisecond)"
             );
-            self.distribute_sleep.store(true, Ordering::Relaxed);
+            self.inner.distribute_sleep.store(true, Ordering::Relaxed);
             tracing::trace!("Enabled distributed sleep!");
 
             // No .abs(), because we know its bigger than 0
             return Ok((seq, util::now()));
         }
 
-        if self.distribute_sleep.swap(false, Ordering::Relaxed) {
+        if self.inner.distribute_sleep.swap(false, Ordering::Relaxed) {
             tracing::trace!("Disabled distributed sleep!");
         }
 
@@ -142,14 +139,14 @@ impl Generator {
 
     fn create_id(&self, now: Nanosecond, seq: i64) -> HexaFreezeResult<i64> {
         // We know, that the epoch cant be in the future, since it's checked at when a generator is created.
-        let ts = now - self.epoch;
+        let ts = now - self.inner.epoch;
 
         if ts > constants::MAX_TIMESTAMP {
             return Err(HexaFreezeError::EpochTooFarInThePast);
         }
 
         let id = ((ts.into_millis()) << constants::TIMESTAMP_SHIFT)
-            | (self.node_id << constants::INSTANCE_SHIFT)
+            | (self.inner.node_id << constants::INSTANCE_SHIFT)
             | (seq << constants::SEQUENCE_SHIFT);
         Ok(id)
     }
