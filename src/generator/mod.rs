@@ -37,24 +37,22 @@ impl Generator {
     /// * When the `epoch` is more than ~69 years ago.
     /// * When the `epoch` is in the future.
     pub fn new(node_id: i64, epoch: DateTime<Utc>) -> HexaFreezeResult<Self> {
-        let epoch = Nanosecond::from_millis(epoch.timestamp_millis());
-        checks::check_node_id(node_id)?;
-        checks::check_epoch(epoch)?;
-
         // Fine, since this is only used for list initialization and is an alternative to ´std::sync::atomic::ATOMIC_I64_INIT´.
         #[allow(clippy::declare_interior_mutable_const)]
         const ATOMIC_I64_ZERO: AtomicI64 = AtomicI64::new(0);
 
+        let epoch = Nanosecond::from_millis(epoch.timestamp_millis());
+        checks::check_node_id(node_id)?;
+        checks::check_epoch(epoch)?;
+
         let inner = Arc::new(Inner {
             epoch,
             node_id,
-            increment: Default::default(),
+            increment: Mutex::default(),
             last_reset_millis: [ATOMIC_I64_ZERO; 4096],
         });
 
-        Ok(Self {
-            inner,
-        })
+        Ok(Self { inner })
     }
 
     /// Generates a new snowflake ID
@@ -95,7 +93,8 @@ impl Generator {
         // `seq` will never be negative.
         // It is an i64, so it can be ORed in `create_id` without casting.
         #[allow(clippy::cast_sign_loss)]
-        let last = Millisecond(self.inner.last_reset_millis[seq as usize].swap(now.0, Ordering::Relaxed));
+        let last =
+            Millisecond(self.inner.last_reset_millis[seq as usize].swap(now.0, Ordering::Relaxed));
 
         tracing::trace!(?now, ?last, seq);
         if now < last {

@@ -6,7 +6,7 @@ use crate::{
 
 pub const fn check_node_id(id: i64) -> HexaFreezeResult<()> {
     if id < 0 {
-        return Err(HexaFreezeError::NodeIdTooLarge)
+        return Err(HexaFreezeError::NodeIdTooLarge);
     }
 
     if id > crate::constants::MAX_NODE_ID {
