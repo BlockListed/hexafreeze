@@ -102,10 +102,10 @@ impl Generator {
         }
 
         if last == now {
-            tokio::time::sleep(Duration::from_millis(1)).await;
             tracing::debug!(
                 "Sleeping, because generator is overloaded. (Rate higher than 4096 IDs/millisecond)"
             );
+            tokio::time::sleep(Duration::from_millis(1)).await;
 
             // No .abs(), because we know its bigger than 0
             return Ok((seq, util::now()));
