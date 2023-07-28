@@ -1,5 +1,4 @@
 use crate::generator::nano::Nanosecond;
-use spin_sleep::{SpinSleeper, SpinStrategy};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn now() -> Nanosecond {
@@ -11,15 +10,4 @@ pub fn now() -> Nanosecond {
             .unwrap()
             .as_nanos() as i64,
     )
-}
-
-// This exists for short sleeping durations, like for example the distributed sleep (~254 ns)
-pub async fn accurate_sleep(duration: std::time::Duration) {
-    tokio::task::spawn_blocking(move || {
-        SpinSleeper::new(100_000)
-            .with_spin_strategy(SpinStrategy::YieldThread)
-            .sleep(duration);
-    })
-    .await
-    .expect("Sleeping failed!");
 }

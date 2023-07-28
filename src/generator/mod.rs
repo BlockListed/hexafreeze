@@ -1,11 +1,10 @@
 use std::ops::DerefMut;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use tokio::sync::Mutex;
-use tokio::time::Instant;
 
 mod checks;
 mod util;
@@ -51,7 +50,6 @@ impl Generator {
             node_id,
             increment: Default::default(),
             last_reset_millis: [ATOMIC_I64_ZERO; 4096],
-            distribute_sleep: Default::default(),
         });
 
         Ok(Self {
@@ -79,25 +77,11 @@ impl Generator {
     /// * you have generated more than `9_223_372_036_854_775_807` ids. (In total, for this generator)
     /// * your clock jumps backward in time a significant amount.
     pub async fn generate(&self) -> HexaFreezeResult<i64> {
-        let start = Instant::now();
         let mut i = self.inner.increment.lock().await;
-        self.distribute_sleep(start).await;
         let (seq, now) = self.get_sequence(i.deref_mut()).await?;
         drop(i);
 
         self.create_id(now, seq)
-    }
-
-    async fn distribute_sleep(&self, start: Instant) {
-        if self.inner.distribute_sleep.load(Ordering::Relaxed) {
-            // Start is required to make sure, that we only sleep the necessary amount of time.
-            util::accurate_sleep(
-                constants::DISTRIBUTED_SLEEP_TIME
-                    .checked_sub(start.elapsed())
-                    .unwrap_or(Duration::ZERO),
-            )
-            .await;
-        }
     }
 
     async fn get_sequence(&self, inc: &mut i64) -> HexaFreezeResult<(i64, Nanosecond)> {
@@ -123,15 +107,9 @@ impl Generator {
             tracing::debug!(
                 "Sleeping, because generator is overloaded. (Rate higher than 4096 IDs/millisecond)"
             );
-            self.inner.distribute_sleep.store(true, Ordering::Relaxed);
-            tracing::trace!("Enabled distributed sleep!");
 
             // No .abs(), because we know its bigger than 0
             return Ok((seq, util::now()));
-        }
-
-        if self.inner.distribute_sleep.swap(false, Ordering::Relaxed) {
-            tracing::trace!("Disabled distributed sleep!");
         }
 
         Ok((seq, (now + Millisecond(1)).into()))
@@ -158,7 +136,6 @@ struct Inner {
     increment: Mutex<i64>,
 
     last_reset_millis: [AtomicI64; 4096],
-    distribute_sleep: AtomicBool,
 }
 
 #[cfg(test)]
