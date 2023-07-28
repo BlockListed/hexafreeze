@@ -19,12 +19,7 @@ use crate::{constants, error::HexaFreezeResult};
 
 #[derive(Clone)]
 pub struct Generator {
-    epoch: Nanosecond,
-    node_id: i64,
-    increment: Arc<Mutex<i64>>,
-
-    last_reset_millis: Arc<[AtomicI64; 4096]>,
-    distribute_sleep: Arc<AtomicBool>,
+    inner: Arc<Inner>,
 }
 
 impl Generator {
@@ -49,6 +44,14 @@ impl Generator {
         let epoch = Nanosecond::from_millis(epoch.timestamp_millis());
         checks::check_node_id(node_id)?;
         checks::check_epoch(epoch)?;
+
+        let inner = Arc::new(Inner {
+            epoch,
+            node_id,
+            increment: Default::default(),
+            last_reset_millis: Arc::new([ATOMIC_I64_ZERO])
+
+        })
 
         Ok(Self {
             epoch,
@@ -150,6 +153,15 @@ impl Generator {
             | (seq << constants::SEQUENCE_SHIFT);
         Ok(id)
     }
+}
+
+struct Inner {
+    epoch: Nanosecond,
+    node_id: i64,
+    increment: Mutex<i64>,
+
+    last_reset_millis: [AtomicI64; 4096],
+    distribute_sleep: AtomicBool,
 }
 
 #[cfg(test)]
